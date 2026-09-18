@@ -1,0 +1,19 @@
+{
+  "source": "https://github.com/kadalesuresh711-lab/narrativeweaver-pixazo.git",
+  "capabilities": [
+    {"capability":"application code and interface","source":"GitHub repository","outcome":"preserve","status":"in_progress","next_action":"copy and verify"},
+    {"capability":"script parsing and timestamp alignment","source":"GitHub repository","outcome":"preserve","status":"in_progress","next_action":"verify"},
+    {"capability":"character bible and prompt writing","source":"Z.ai","outcome":"preserve_and_improve","status":"in_progress","next_action":"add deterministic scene ledger and verify"},
+    {"capability":"image generation","source":"Pixazo Flux.1 Schnell","outcome":"preserve_and_improve","status":"in_progress","next_action":"apply light webtoon style and verify"},
+    {"capability":"saved run progress","source":"browser IndexedDB","outcome":"preserve","status":"in_progress","next_action":"verify"},
+    {"capability":"video export","source":"browser encoder","outcome":"preserve","status":"in_progress","next_action":"verify"},
+    {"capability":"database records","source":"none detected","outcome":"not_applicable","status":"verified","next_action":"none"},
+    {"capability":"authentication and identities","source":"none detected","outcome":"not_applicable","status":"verified","next_action":"none"},
+    {"capability":"uploaded file storage","source":"none detected","outcome":"not_applicable","status":"verified","next_action":"none"},
+    {"capability":"provider credentials","source":"user supplied","outcome":"preserve securely","status":"in_progress","next_action":"store as encrypted server secrets"},
+    {"capability":"public endpoints and callbacks","source":"internal prompt and image proxy routes only","outcome":"preserve","status":"in_progress","next_action":"verify allowlist and responses"},
+    {"capability":"webhooks and schedules","source":"none detected","outcome":"not_applicable","status":"verified","next_action":"none"},
+    {"capability":"cutover","source":"new Lovable project","outcome":"replace starter at root","status":"in_progress","next_action":"verify preview"},
+    {"capability":"end-to-end verification","source":"preview and live provider calls","outcome":"required","status":"pending","next_action":"run after implementation"}
+  ]
+}
