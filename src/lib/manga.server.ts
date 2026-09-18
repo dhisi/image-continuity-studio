@@ -16,12 +16,10 @@ const IMAGE_REQUEST_TIMEOUT_MS = 1_800_000;
  * unwanted media such as photography or pencil sketches can make Flux draw them.
  */
 export const STYLE =
-  "FIXED VISUAL STYLE: one single 1990s American printed comic-book story panel inside one clean rectangular frame " +
-  "with a bold black border, forceful hand-inked contour lines with varied brush weight, large solid black shadow shapes, " +
-  "dense cross-hatching and coarse ben-day dots, grounded Western-comic anatomy and expressive body language, matte flat " +
-  "CMYK ink separations on slightly off-white newsprint, a restrained six-colour palette of faded crimson, mustard, " +
-  "forest green, dusty blue, warm skin tones and black, minimal white highlights, crisp foreground silhouettes and a " +
-  "fully inked story-specific background, authentic vintage American sequential comic art";
+  "FIXED VISUAL STYLE: one clean modern vertical-webtoon story illustration in a single rectangular frame, " +
+  "crisp confident line art, smooth cel shading, natural human proportions, expressive readable faces and dynamic poses, " +
+  "soft light colours with restrained saturation, pale blue skies, gentle warm skin tones, limited accent colours, " +
+  "subtle soft shadows, clean surfaces and a detailed story-specific environment, polished Korean webcomic finish";
 
 
 /**
@@ -904,22 +902,36 @@ export function chainContinuity(
 ): string[] {
   if (!all || !wanted || wanted.length !== prompts.length) return prompts;
   let active: string | null = null;
+  let activeLock: PlaceLock | null = null;
   return prompts.map((prompt, i) => {
     if (!prompt.trim()) return prompt;
+    const segment = all[(wanted[i] as number) - 1];
     const here = detectSetting(prompt);
-    if (here) {
+    const place = matchingPlace(`${segment?.text ?? ""} ${prompt}`);
+    const sourceChangesPlace = segment ? PLACE_CUES.test(segment.text) : false;
+    PLACE_CUES.lastIndex = 0;
+    if (place && (active === null || sourceChangesPlace)) {
+      active = detectSetting(`${place.name} ${place.details}`) ?? place.name;
+      activeLock = place;
+      return `${prompt}. LOCATION LOCK — ${place.name}: ${place.details}. Keep this exact set unchanged in continuing panels`;
+    }
+    if (here && (active === null || sourceChangesPlace)) {
       // The writer named a place for THIS timestamp. That place is the script's
       // own, so it is never overwritten with an earlier panel's location — the
       // old rewrite silently moved whole stretches of the story into the first
       // panel's room whenever the Hindi line's place word was not in the cue
       // list, which made prompts read as a different scene than the script.
       active = here;
-      return prompt;
+      activeLock = null;
+      return `${prompt}. LOCATION LOCK — ${here}: keep one stable layout, architecture, materials, colours, fixed furniture, landmarks and light direction for this continuing scene`;
     }
     if (!active) return prompt;
     // Only a prompt with NO place of its own inherits the running location, and
     // it is described as scenery, never as an instruction.
-    return `${prompt}. The same ${active} as the previous panel, with the same walls, furniture, props and time of day`;
+    const lock = activeLock
+      ? `${activeLock.name}: ${activeLock.details}`
+      : active;
+    return `${prompt}. LOCATION LOCK — same ${lock} as the previous panel; preserve the identical architecture, room layout, materials, colours, fixed furniture, doors, windows, landmarks and light direction`;
   });
 }
 
@@ -1201,7 +1213,7 @@ export function sanitizePrompt(p: string): string {
     )
     .replace(
       /\b(black[- ]and[- ]white|black ?& ?white|monochrome|monochromatic|gr[ae]yscale|sepia|screentone|halftone|ink wash only)\b/gi,
-      "restrained flat print colours",
+      "soft restrained cel colours",
     );
   for (const [re, to] of TEXT_TRIGGERS) out = out.replace(re, to);
   for (const [re, to] of METAPHOR_TRIGGERS) out = out.replace(re, to);
@@ -1234,6 +1246,61 @@ export function parseBible(bible: string): { name: string; traits: string }[] {
     })
     .filter((v): v is { name: string; traits: string } => v !== null)
     .slice(0, 12);
+}
+
+export type PlaceLock = { name: string; details: string };
+
+/** Fixed locations from either the generated bible or the user's manual sheet. */
+export function parsePlaces(bible?: string): PlaceLock[] {
+  if (!bible) return [];
+  return bible
+    .split("\n")
+    .map((line) => line.replace(/^[\s\-*•\d.)]+/, "").trim())
+    .map((line) => {
+      const match = /^(?:place|location|setting)\s*-\s*([^:]+):\s*(.+)$/i.exec(line);
+      if (!match) return null;
+      const name = (match[1] ?? "").trim();
+      const details = (match[2] ?? "").trim().replace(/\.$/, "");
+      return name && details ? { name, details } : null;
+    })
+    .filter((value): value is PlaceLock => value !== null)
+    .slice(0, 12);
+}
+
+function normalizedWords(value: string): string[] {
+  return value
+    .toLocaleLowerCase()
+    .replace(/[^\p{L}\p{N}\s]/gu, " ")
+    .split(/\s+/)
+    .filter((word) => word.length > 2);
+}
+
+/** Match a written scene to the most specific reusable location in the bible. */
+function matchingPlace(text: string, bible?: string): PlaceLock | null {
+  const folded = text.toLocaleLowerCase();
+  let best: { place: PlaceLock; score: number } | null = null;
+  for (const place of parsePlaces(bible)) {
+    const words = normalizedWords(place.name);
+    const score = words.reduce((sum, word) => sum + (folded.includes(word) ? word.length : 0), 0);
+    if (score > 0 && (!best || score > best.score)) best = { place, score };
+  }
+  return best?.place ?? null;
+}
+
+/**
+ * A stable set fingerprint repeated verbatim in every panel of one continuing
+ * scene. This is data, not a creative suggestion: the renderer must preserve
+ * the architecture, furniture, colours, landmarks and light between shots.
+ */
+export function locationLock(prompt: string, bible?: string, continuity?: string): string {
+  const combined = `${prompt} ${continuity ?? ""}`;
+  const place = matchingPlace(combined, bible);
+  if (place) {
+    return `LOCATION LOCK — ${place.name}: ${place.details}. Preserve this exact architecture, room layout, materials, colours, fixed furniture, doors, windows, landmarks and light direction in every continuing image`;
+  }
+  const setting = detectSetting(combined);
+  if (!setting) return "";
+  return `LOCATION LOCK — same ${setting}: preserve the exact architecture, layout, wall and floor colours, doors, windows, fixed furniture, landmarks and light direction established in the previous image`;
 }
 
 /** Characters explicitly named in script text or a written prompt. */
@@ -1629,7 +1696,7 @@ function clip(s: string, max: number): string {
  * without ever naming faces or eyes as things to draw.
  */
 const STYLE_LEAD =
-  "one single 1990s American printed comic-book story panel showing";
+  "one clean modern webtoon story illustration showing";
 
 
 /**
@@ -1644,10 +1711,9 @@ const STYLE_LEAD =
  * being used for.
  */
 const STYLE_TAIL =
-  "authentic 1990s American print-comic artwork, forceful varied black brush lines, large solid black shadow shapes, " +
-  "dense cross-hatching, coarse ben-day dots, grounded Western-comic anatomy, matte flat CMYK ink separations on " +
-  "off-white newsprint, restrained faded crimson mustard forest-green dusty-blue and warm-skin palette, minimal white " +
-  "highlights, fully inked detailed background, consistent vintage sequential comic panel style";
+  "polished modern Korean webcomic artwork, crisp clean contour lines, smooth simple cel shading, natural anatomy, " +
+  "soft light colours with restrained saturation, pale blues and gentle warm skin tones, subtle shadows, clean highlights, " +
+  "detailed but uncluttered background, identical visual style across the sequence";
 
 
 /**
@@ -1659,8 +1725,7 @@ const STYLE_TAIL =
  * into the picture, which is what kept producing pages with balloons.
  */
 const SINGLE_FRAME_GUARD =
-  "exactly one comic panel filling the whole image, one continuous scene inside a single rectangular " +
-  "black panel border, smooth clean artwork surface";
+  "exactly one illustration filling the whole image, one continuous scene inside a single clean rectangular frame";
 
 
 
@@ -1797,6 +1862,7 @@ export function composeImagePrompt(
   // Exactly ONE identity description per character, and only when someone is
   // actually in frame. No second appearance-lock paragraph.
   const identity = peopled ? clip(identityBrief(sceneText, bible), LOCK_BUDGET) : "";
+  const setLock = locationLock(sceneText, bible, continuity);
 
   // The place owns the very first words. A close-up line ("Close-up of Yuki
   // shouting") used to open the prompt with a face and nothing else, and the
@@ -1818,7 +1884,8 @@ export function composeImagePrompt(
     `${STYLE_LEAD} ${placeLead}${beat.lead}`,
     restText,
     identity,
-    continuity ? clip(`same place and same people as the previous picture: ${continuity}`, 160) : "",
+    setLock,
+    continuity ? clip(`continue the same action and spatial positions from the previous picture: ${continuity}`, 140) : "",
     peopled ? STAGING_GUARD : "",
     peopled ? FRAMING_GUARD : "",
     peopled ? "each person appears once" : "empty location, scenery only",
@@ -1890,7 +1957,7 @@ export async function generateImage(
   line?: string,
   continuity?: string,
 ): Promise<string> {
-  const body = composeImagePrompt(prompt, bible, line, continuity).slice(0, 2000);
+  const body = composeImagePrompt(prompt, bible, line, continuity);
 
   let lastErr = "";
   for (let attempt = 0; attempt < Math.max(1, attempts); attempt++) {
